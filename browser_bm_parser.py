@@ -51,7 +51,7 @@ class BookmarksParser(HTMLParser):
             self.end_tag = tag
         else:
             self.end_tag = tag
-            
+
 #TODO: Finish parsing
         if tag == Tag.H3:
             if self.state == ParseState.GroupData_Name:
@@ -59,6 +59,7 @@ class BookmarksParser(HTMLParser):
                 print(self.curr_group.name)
             elif self.state == ParseState.InitSubGroup:
                 self.curr_subgroup_name = self.curr_group.name + '.'
+                self.state = ParseState.GroupData_Name
         elif tag == Tag.A and self.state == ParseState.DataLink:
             pass
         elif tag == Tag.DL and self.state == ParseState.DataLink:

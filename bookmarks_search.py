@@ -21,13 +21,36 @@ class SearchData:
         self.url_group = []
         self.exclude_group = []
 
+    def is_valid_group(self, group_name):
+        name = group_name.split('.')
+        name_len = len(name)
+
+        if len(self.exclude_group): 
+            for exclude_name in self.exclude_group:
+                exclude = exclude_name.split('.')
+                exclude_len = len(exclude)
+
+                if name_len == 1:
+                    if name[0] in exclude:
+                        return False
+                elif name_len >= exclude_len:
+                    valid = True
+                    for i in range(exclude_len):
+                        if name[i] == exclude[i]:
+                            valid = False
+                            break
+                    
+                    return valid
+
+        return True
+
     def get_file_group_url_info(self, file_desc, file_ext):
         if file_ext == HTML_EXT:
             file_data = file_desc.read()
-            file_urls_group = browser_bm_parse_html(self.exclude_group, self.url_group, self.urls, file_data)
+            file_urls_group = browser_bm_parse_html(file_data)
         elif file_ext == JSON_EXT:
             file_data = json.load(file_desc)
-            file_urls_group = sd_parse_json(self.exclude_group, self.url_group, self.urls, file_data)
+            file_urls_group = sd_parse_json(file_data)
 
         return file_urls_group
     
@@ -40,19 +63,17 @@ class SearchData:
                     present = True
                     group.urls += test.urls
             
-            if not present:
+            if not present and self.is_valid_group(test.name):
                 files_groups.append(test)
 
     def pack_to_search_data(self, files_groups):
         for group in files_groups:
-            if group.name not in self.exclude_group:
-                curr_len = len(self.urls)
-                group_min = curr_len
-                group_max = group_min + len(group.urls)
-                url_group = UrlGroup(group.name, group_min, group_max)
-                self.url_group.append(url_group)
-                self.urls += group.urls
-##TODO Finish
+            curr_len = len(self.urls)
+            group_min = curr_len
+            group_max = group_min + len(group.urls)
+            url_group = UrlGroup(group.name, group_min, group_max)
+            self.url_group.append(url_group)
+            self.urls += group.urls
 
     def parse_files_urls(self, files_to_parse):
         files_groups = []
@@ -108,6 +129,9 @@ def main():
     cli_args = parse_cmd_args()
 
     search_data.parse_files(cli_args.file, cli_args.exclude)
+
+    for group in search_data.url_group:
+        print(group.name)
 
     print(cli_args)
 

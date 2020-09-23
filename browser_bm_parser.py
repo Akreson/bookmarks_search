@@ -16,17 +16,10 @@ class ParseState:
     GroupData_Name = 2
     GroupData_Links = 3
 
-    ExitGroup_Name = 4
-    EnterGroupData = 5
-    ExitGroupData = 6
+    InitGroup = 4
+    InitSubGroup = 5
 
-    SubgroupData = 7
-    SubgroupData_Name = 8
-
-    InitGroup = 9
-    InitSubGroup = 10
-
-    DataLink = 11
+    DataLink = 6
 
 class BookmarksParser(HTMLParser):
     def __init__(self):
@@ -69,7 +62,6 @@ class BookmarksParser(HTMLParser):
     def handle_endtag(self, tag):
         self.set_end_tag(tag)
 
-#TODO: Finish parsing
         if tag == Tag.H3:
             if self.state == ParseState.GroupData_Name:
                 self.curr_group.name = self.get_curr_group_name()
@@ -123,13 +115,9 @@ class BookmarksParser(HTMLParser):
     def handle_data(self, data):
        self.curr_tag_data = data
 
-def browser_bm_parse_html(exlcude_group, url_group, urls, html_data):
+def browser_bm_parse_html(html_data):
     bm_parser = BookmarksParser()
     bm_parser.feed(html_data)
-
-    for group in bm_parser.file_url_groups:
-        print('{0} {1}'.format(group.name, len(group.urls)))
-    print(len(bm_parser.file_url_groups))
 
     return bm_parser.file_url_groups
 

@@ -35,7 +35,7 @@ def fill_groups_urls(url_groups, json_data):
             group.urls.append(value['url']) 
 
 
-def sd_parse_json(exlcude_group, url_group, urls, json_data):
+def sd_parse_json(json_data):
     sd_groups = get_sd_url_groups(json_data)
     fill_groups_urls(sd_groups, json_data)
     

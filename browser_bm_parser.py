@@ -75,8 +75,14 @@ class BookmarksParser(HTMLParser):
                 self.curr_group.name = self.get_curr_group_name()
                 #print('{0} {1}'.format(self.curr_group.name, self.state))
             elif self.state == ParseState.InitSubGroup:
+                self.state = ParseState.GroupData_Links
                 self.curr_subgroup_name = self.curr_group.name + '.'
-                self.curr_group.name = self.get_curr_group_name()
+
+                if len(self.curr_group.urls):
+                    self.file_url_groups.append(self.curr_group)
+                    self.curr_group = FileUrlGroup(self.get_curr_group_name())
+                else:
+                    self.curr_group.name = self.get_curr_group_name()
                 #print('--Set SUB_group NAME {0} {1}'.format(self.curr_subgroup_name, self.curr_group.name))
         elif tag == Tag.DL:
             if self.state == ParseState.DataLink:
@@ -84,6 +90,9 @@ class BookmarksParser(HTMLParser):
                 self.state = ParseState.InitGroup
                 self.curr_group = FileUrlGroup(self.default_name)
                 #print('--EXIT group {}'.format(self.state))
+            elif self.state == ParseState.GroupData_Links:
+                self.state = ParseState.InitGroup
+                self.curr_group = FileUrlGroup(self.default_name)
             elif self.state == ParseState.InitGroup:
                 self.curr_subgroup_name = ''
 
@@ -98,7 +107,7 @@ class BookmarksParser(HTMLParser):
             if self.state == ParseState.GroupData: 
                 self.state = ParseState.GroupData_Name
                 #print('--Set group NAME {0} {1}'.format(tag, self.state))
-            elif self.state == ParseState.GroupData_Links:
+            elif self.state == ParseState.GroupData_Links or self.state == ParseState.DataLink:
                 self.state = ParseState.InitSubGroup
                 #print('--Enter SUB_group NAME {0} {1}'.format(tag, self.state))
         elif tag == Tag.DL:
@@ -106,6 +115,10 @@ class BookmarksParser(HTMLParser):
                 self.state = ParseState.GroupData_Links
         elif tag == Tag.A and self.prev_open_tag == Tag.DT:
             self.state = ParseState.DataLink
+
+            for (attribute, value) in attrs:
+                if attribute == 'href':
+                    self.curr_group.urls.append(value)
         
     def handle_data(self, data):
        self.curr_tag_data = data
@@ -115,7 +128,7 @@ def browser_bm_parse_html(exlcude_group, url_group, urls, html_data):
     bm_parser.feed(html_data)
 
     for group in bm_parser.file_url_groups:
-        print(group.name)
+        print('{0} {1}'.format(group.name, len(group.urls)))
     print(len(bm_parser.file_url_groups))
 
     return bm_parser.file_url_groups

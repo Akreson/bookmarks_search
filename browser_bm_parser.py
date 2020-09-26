@@ -1,4 +1,3 @@
-from urllib import parse
 from html.parser import HTMLParser
 from file_urls_parser import *
 

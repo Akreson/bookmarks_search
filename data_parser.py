@@ -1,8 +1,8 @@
 import os
 import sys
 import json
-from browser_bm_parser import *
-from speed_dial_parser import *
+from browser_bm_parser import browser_bm_parse_html
+from speed_dial_parser import sd_parse_json
 
 JSON_EXT = '.json'
 HTML_EXT = '.html'
@@ -14,11 +14,12 @@ class UrlGroup:
         self.name = name
 
 class SearchData:
-    def __init__(self, files, exclude_groups):
+    def __init__(self, files, exclude_groups, string):
         self.urls = []
         self.url_group = []
         self.exclude_group = []
-        
+        self.strings_to_find = string
+
         self.parse_files(files, exclude_groups)
 
     def is_valid_group(self, group_name):

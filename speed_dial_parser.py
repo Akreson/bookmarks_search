@@ -1,4 +1,4 @@
-from file_urls_parser import *
+from data_parser import FileUrlGroup
 
 #TODO: Handle error!!
 #TODO: throw error

@@ -1,5 +1,5 @@
 from html.parser import HTMLParser
-from file_urls_parser import *
+from data_parser import FileUrlGroup
 
 class Tag:
     DT = 'dt'

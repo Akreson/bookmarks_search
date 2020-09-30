@@ -4,6 +4,9 @@ import argparse
 import multiprocessing
 import itertools
 import asyncio
+import queue
+import re
+import time
 
 import aiohttp
 
@@ -38,13 +41,13 @@ class Scheduler:
         return next(self.queue)
 
 class WorkerCommand:
-    JobInfo = 0
+    End = 0
     Task = 1
-    End = 2
+    JobInfo = 2
 
 class Worker:
     def __init__(self, result_q, task_q):
-        self.taks_q = task_q
+        self.task_q = task_q
         self.result_q = result_q
         self.find_string = []
 
@@ -53,14 +56,43 @@ class Worker:
     def start(self):
         self.process.start()
 
-    def run(self):
-        while True:
-            pass
+    def dispatch_task(self, task_payload):
+        link_index = task_payload[0]
+        html = task_payload[1]
 
+        result_msg = []
+        for i, string in enumerate(self.find_string):
+            match_pos = [m.start() for m in re.finditer(string, html)]
+            count_match = len(match_pos)
+            if count_match != 0:
+                result_msg.append((i, count_match))
+        
+        if len(result_msg):
+            self.result_q.put((link_index, result_msg))
+
+    def run(self):
+
+        running = True
+        while running:
+            try:
+                task = self.task_q.get()
+            except queue.Empty:
+                time.sleep(0.005)
+                continue
+            
+            task_type, task_payload = task
+
+            if task_type == WorkerCommand.Task:
+                self.dispatch_task(task_payload)
+            elif task_type == WorkerCommand.JobInfo:
+                self.string_list = task_payload
+            elif task_type == WorkerCommand.End:
+                self.result_q.put((WorkerCommand.End, 0))
+                running = False
 
 class DataProcess:
     def __init__(self, search_data, max_async_task = 200):
-        self.worker_count = min(os.cpu_count - 1, 4)
+        self.worker_count = min(os.cpu_count() - 1, 4)
         self.worker_proc = []
         self.scheduler = Scheduler()
         self.search_data = search_data
@@ -79,6 +111,24 @@ class DataProcess:
             
         self.scheduler.register_queue(self.worker_proc)
 
+#NOTE: Test code
+        time.sleep(1)
+        test_count = 0
+        while True:
+            if not len(self.worker_proc):
+                break
+            print('{0} {1}'.format(test_count, len(self.worker_proc)))
+            
+            for worker in self.worker_proc:
+                try:
+                    result = worker.result_q.get()
+                    test_count += 1
+                    print('{0} {1}'.format(result, worker.process.is_alive()))
+                    self.worker_proc.remove(worker)
+                except queue.Empty:
+                    continue
+        print('End')
+
     def create_worker(self):
         result_q = proc_context.Queue()
         task_q = proc_context.Queue()
@@ -86,7 +136,11 @@ class DataProcess:
         worker.start()
 
         return worker
-    
+
+    def send_worker_end(self):
+        for worker in self.worker_proc:
+            worker.task_q.put((WorkerCommand.End, 0))
+
     async def process_link(self, session, link_index):
         link_url = self.search_data.urls[link_index]
 
@@ -118,6 +172,8 @@ class DataProcess:
                         task = asyncio.create_task(self.process_link(session, self.last_pushed_url_count))
                         pending_task.append(task)
                         self.last_pushed_url_count += 1
+        
+        self.send_worker_end()
 
     def run(self):
         asyncio.run(self.start_processing())
@@ -127,9 +183,10 @@ def main():
     cli_args = parse_cmd_args()
     search_data = SearchData(cli_args.file, cli_args.exclude, cli_args.string)
     data_process = DataProcess(search_data)
+    #data_process.run()
 
-    for group in search_data.url_group:
-        print(group.name)
+    #for group in search_data.url_group:
+    #    print(group.name)
 
     print(cli_args)
 

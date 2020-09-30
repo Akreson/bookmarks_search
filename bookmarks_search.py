@@ -100,7 +100,7 @@ class DataProcess:
         self.max_async_task = min(max_async_task, len(self.search_data.urls))
         self.last_pushed_url_count = self.max_async_task
 
-        self.init()
+        #self.init()
     
     def init(self):
         for _ in range(self.worker_count):
@@ -112,22 +112,7 @@ class DataProcess:
         self.scheduler.register_queue(self.worker_proc)
 
 #NOTE: Test code
-        time.sleep(1)
-        test_count = 0
-        while True:
-            if not len(self.worker_proc):
-                break
-            print('{0} {1}'.format(test_count, len(self.worker_proc)))
-            
-            for worker in self.worker_proc:
-                try:
-                    result = worker.result_q.get()
-                    test_count += 1
-                    print('{0} {1}'.format(result, worker.process.is_alive()))
-                    self.worker_proc.remove(worker)
-                except queue.Empty:
-                    continue
-        print('End')
+
 
     def create_worker(self):
         result_q = proc_context.Queue()
@@ -181,12 +166,12 @@ class DataProcess:
 
 def main():
     cli_args = parse_cmd_args()
-    search_data = SearchData(cli_args.file, cli_args.exclude, cli_args.string)
+    search_data = SearchData(cli_args.file, cli_args.group, cli_args.exclude, cli_args.string)
     data_process = DataProcess(search_data)
     #data_process.run()
 
-    #for group in search_data.url_group:
-    #    print(group.name)
+    for group in search_data.url_group:
+        print(group.name)
 
     print(cli_args)
 

@@ -20,35 +20,44 @@ class UrlGroup:
         self.name = name
 
 class SearchData:
-    def __init__(self, files, exclude_groups, string):
+    def __init__(self, files, get_group, exclude_groups, string):
         self.urls = []
         self.url_group = []
         self.exclude_group = exclude_groups
-        self.get_group = []
+        self.get_group = get_group
         self.strings_to_find = string
 
         self.parse_files(files)
 
+    def group_name_match(self, name, group_list):
+        name_len = len(name)
+        
+        for group_name in group_list:
+            group = group_name.split('.')
+            group_len = len(group)
+
+            if name_len == 1:
+                if name[0] in group:
+                    return True
+            elif group_len == 1:
+                if group[0] in name:
+                    return True
+            elif name_len >= group_len:
+                valid = True
+                for i in range(group_len):
+                    if name[i] != group[i]:
+                        valid = False
+                        break
+                
+                return valid
+
     def is_valid_group(self, group_name):
         name = group_name.split('.')
-        name_len = len(name)
 
-        if len(self.exclude_group): 
-            for exclude_name in self.exclude_group:
-                exclude = exclude_name.split('.')
-                exclude_len = len(exclude)
-
-                if name_len == 1:
-                    if name[0] in exclude:
-                        return False
-                elif name_len >= exclude_len:
-                    valid = True
-                    for i in range(exclude_len):
-                        if name[i] == exclude[i]:
-                            valid = False
-                            break
-                    
-                    return valid
+        if len(self.get_group):
+            return self.group_name_match(name, self.get_group)
+        elif len(self.exclude_group):
+            return not self.group_name_match(name, self.exclude_group)
 
         return True
 

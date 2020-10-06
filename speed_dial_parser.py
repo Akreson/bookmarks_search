@@ -31,8 +31,9 @@ def fill_groups_urls(url_groups, json_data):
     for (_, value) in urls_dict.items():
         group_id = value['idgroup']
         group = url_groups[group_id]
-        if group != None:
-            group.urls.append(value['url']) 
+        if group:
+            group.urls.append(value['url'])
+            group.urls_title.append(value['title'])
 
 
 def sd_parse_json(json_data):

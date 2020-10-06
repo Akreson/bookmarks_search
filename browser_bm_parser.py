@@ -86,6 +86,10 @@ class BookmarksParser(HTMLParser):
                 self.curr_group = FileUrlGroup(self.default_name)
             elif self.state == ParseState.InitGroup:
                 self.curr_subgroup_name = ''
+        elif tag == Tag.A:
+            if self.state == ParseState.DataLink:
+                self.curr_group.urls_title.append(self.curr_tag_data)
+
 
     def handle_starttag(self, tag, attrs):
         self.set_open_tag(tag)

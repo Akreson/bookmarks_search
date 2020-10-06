@@ -35,13 +35,14 @@ class AggregateResult:
 
         aggregate_group_count = len(self.group)
         for i in range(1, aggregate_group_count):
-            agg_group = self.group[i]
             agg_group = AggregateGroup()
 
             url_groups_id = get_set_bit(i, self.prime_group_count)
-            for i in range(len(url_groups_id)):
-                group = url_groups[url_groups_id[i]]
+            for id in url_groups_id:
+                group = url_groups[id]
                 agg_group.name += (group.name + ' ')
+
+            self.group[i] = agg_group
     
     #TODO: Fix index cacl
     def put(self, task_data):
@@ -228,12 +229,14 @@ class DataProcess:
     
     def stdout_print(self, aggregate_result):
         if aggregate_result.id_count:
-            for group in aggregate_result.group:
-                print(group.name)
+            for group in aggregate_result.group[1:]:
+                print('-{}\n'.format(group.name))
 
                 for id in group.urls_id:
                     url = self.search_data.urls[id]
-                    print(url)
+                    url_title = self.search_data.urls_title[id]
+
+                    print('{0}\n{1}\n'.format(url_title, url))
         else:
             print('No result')
             

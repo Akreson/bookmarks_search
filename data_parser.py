@@ -9,6 +9,7 @@ class FileUrlGroup:
     def __init__(self, name):
         self.name = name
         self.urls = []
+        self.urls_title = []
 
 from browser_bm_parser import browser_bm_parse_html
 from speed_dial_parser import sd_parse_json
@@ -22,6 +23,7 @@ class UrlGroup:
 class SearchData:
     def __init__(self, files, get_group, exclude_groups, string):
         self.urls = []
+        self.urls_title = []
         self.url_group = []
         self.exclude_group = exclude_groups
         self.get_group = get_group
@@ -79,6 +81,7 @@ class SearchData:
                 if test.name == group.name:
                     present = True
                     group.urls += test.urls
+                    group.urls_title += test.urls_title
             
             if not present and self.is_valid_group(test.name):
                 files_groups.append(test)
@@ -91,6 +94,7 @@ class SearchData:
             url_group = UrlGroup(group.name, group_min, group_max)
             self.url_group.append(url_group)
             self.urls += group.urls
+            self.urls_title += group.urls_title
 
     def parse_files_urls(self, files_to_parse):
         files_groups = []

@@ -22,29 +22,33 @@ class AggregateGroup:
     def __init__(self):
         self.name = ''
         self.urls_id = []
+        self.last_stopped = 0
 
 class AggregateResult:
-    def __init__(self, url_groups):
+    def __init__(self, find_string_groups):
         self.id_count = 0
-        self.prime_group_count = len(url_groups)
-        self.group = [None]*(2**self.prime_group_count)
+        self.prime_group_count = len(find_string_groups)
+        self.find_group = [None]*(2**self.prime_group_count)
 
-        self.init_coll_group(url_groups)
+        self.init_coll_group(find_string_groups)
     
-    def init_coll_group(self, url_groups):
+    def init_coll_group(self, find_string_groups):
 
-        aggregate_group_count = len(self.group)
+        aggregate_group_count = len(self.find_group)
         for i in range(1, aggregate_group_count):
             agg_group = AggregateGroup()
 
-            url_groups_id = get_set_bit(i, self.prime_group_count)
-            for id in url_groups_id:
-                group = url_groups[id]
-                agg_group.name += (group.name + ' ')
+            find_string_groups_id = get_set_bit(i, self.prime_group_count)
+            for i, id in enumerate(find_string_groups_id):
+                group_separator = ''
+                if i > 0:
+                    group_separator = ', '
 
-            self.group[i] = agg_group
-    
-    #TODO: Fix index cacl
+                group = find_string_groups[id]
+                agg_group.name += (group + group_separator)
+
+            self.find_group[i] = agg_group
+
     def put(self, task_data):
         link_id, task_results = task_data
 
@@ -53,10 +57,18 @@ class AggregateResult:
             group_id |= 1 << result[0]
 
         if group_id != 0:
-            group = self.group[group_id]
+            group = self.find_group[group_id]
             if group:
                 group.urls_id.append(link_id)
                 self.id_count += 1
+    
+    def sort_group_index(self):
+
+        new_group = [group for group in self.find_group if group != None]
+        self.find_group = new_group
+
+        for group in self.find_group:
+            group.urls_id.sort()
 
 class Scheduler:
     def __init__(self):
@@ -94,16 +106,13 @@ class Worker:
 
         result_msg = []
         for i, string in enumerate(self.find_string):
-            #match_pos = [m.start() for m in re.finditer(string, html)]
+            match_pos = [m.start() for m in re.finditer(string, html)]
+
             #NOTE: count_match not used for now
-            #count_match = len(match_pos)
-            #if count_match != 0:
-                #result_msg.append((i, count_match))
-            find_res = html.find(string)
-            if find_res > 0:
-                #print('-FIND {}'.format(find_res))
-                result_msg.append((i, 0))
-        
+            count_match = len(match_pos)
+            if count_match != 0:
+                result_msg.append((i, count_match))
+                    
         if len(result_msg):
             #print('-Put to result queue')
             self.result_q.put((WorkerCommand.Task, (link_index, list(result_msg))))
@@ -226,24 +235,36 @@ class DataProcess:
                 elif task_comm == WorkerCommand.End:
                     #print('-END COMMAND')
                     break
+        
+        aggregate_result.sort_group_index()
     
     def stdout_print(self, aggregate_result):
         if aggregate_result.id_count:
-            for group in aggregate_result.group[1:]:
-                print('-{}\n'.format(group.name))
+            for url_group in self.search_data.url_group:
+                url_group_name = '-- {}\n'.format(url_group.name).encode('utf-8')
+                sys.stdout.buffer.write(url_group_name)
 
-                for id in group.urls_id:
-                    url = self.search_data.urls[id]
-                    url_title = self.search_data.urls_title[id]
+                for find_group in aggregate_result.find_group:
+                    find_group_name = '\t- {}\n'.format(find_group.name).encode('utf-8')
+                    sys.stdout.buffer.write(find_group_name)
 
-                    print('{0}\n{1}\n'.format(url_title, url))
+                    for i, id in enumerate(find_group.urls_id[find_group.last_stopped:]):
+                        if id < url_group.max:
+                            url = self.search_data.urls[id]
+                            url_title = self.search_data.urls_title[id]
+
+                            link_info = '\t\t{0}\n\t\t{1}\n\n'.format(url_title, url).encode('utf-8')
+                            sys.stdout.buffer.write(link_info)
+                        else:
+                            find_group.last_stoped = i
+
         else:
             print('No result')
             
     def run(self):
         asyncio.run(self.start_processing())
 
-        aggregate_result = AggregateResult(self.search_data.url_group)
+        aggregate_result = AggregateResult(self.search_data.strings_to_find)
 
         self.wait_workers()
 

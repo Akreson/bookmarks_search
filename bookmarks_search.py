@@ -18,6 +18,19 @@ proc_context = multiprocessing.get_context('spawn')
 def get_set_bit(num, max_range):
     return [i for i in range(max_range) if num & (1 << i)]
 
+def find_matching(text, find_strings):
+    result = []
+
+    for i, string in enumerate(find_strings):
+        match_pos = [m.start() for m in re.finditer(string, text)]
+
+        #NOTE: count_match not used for now
+        count_match = len(match_pos)
+        if count_match != 0:
+            result.append((i, count_match))
+    
+    return result
+
 class AggregateGroup:
     def __init__(self):
         self.name = ''
@@ -33,15 +46,15 @@ class AggregateResult:
         self.init_coll_group(find_string_groups)
     
     def init_coll_group(self, find_string_groups):
-
         aggregate_group_count = len(self.find_group)
+
         for i in range(1, aggregate_group_count):
             agg_group = AggregateGroup()
 
             find_string_groups_id = get_set_bit(i, self.prime_group_count)
-            for i, id in enumerate(find_string_groups_id):
+            for num, id in enumerate(find_string_groups_id):
                 group_separator = ''
-                if i > 0:
+                if num > 0:
                     group_separator = ', '
 
                 group = find_string_groups[id]
@@ -63,7 +76,6 @@ class AggregateResult:
                 self.id_count += 1
     
     def sort_group_index(self):
-
         new_group = [group for group in self.find_group if group != None]
         self.find_group = new_group
 
@@ -104,22 +116,13 @@ class Worker:
         link_index = task_payload[0]
         html = task_payload[1]
 
-        result_msg = []
-        for i, string in enumerate(self.find_string):
-            match_pos = [m.start() for m in re.finditer(string, html)]
-
-            #NOTE: count_match not used for now
-            count_match = len(match_pos)
-            if count_match != 0:
-                result_msg.append((i, count_match))
-                    
+        result_msg = find_matching(html, self.find_string)
         if len(result_msg):
-            #print('-Put to result queue')
             self.result_q.put((WorkerCommand.Task, (link_index, list(result_msg))))
 
     def run(self):
-
         running = True
+
         while running:
             try:
                 task = self.task_q.get()
@@ -134,24 +137,19 @@ class Worker:
                 self.find_string = task_payload
             elif task_type == WorkerCommand.End:
                 self.result_q.put((WorkerCommand.End, 0))
-                #print('-Worker END')
                 running = False
 
 class DataProcess:
-    def __init__(self, search_data, max_async_task = 200):
-        self.worker_count = min(os.cpu_count() - 1, 4)
+    def __init__(self, search_data, max_workers = 4, max_async_task = 200):
+        self.worker_count = min(os.cpu_count() - 1, max_workers)
         self.worker_proc = []
         self.scheduler = Scheduler()
         self.search_data = search_data
 
         self.max_async_task = min(max_async_task, len(self.search_data.urls))
         self.last_pushed_url_count = self.max_async_task
-
-        print(len(self.search_data.urls))
-
-        self.init()
     
-    def init(self):
+    def init_workers(self):
         for _ in range(self.worker_count):
             self.worker_proc.append(self.create_worker())
 
@@ -188,7 +186,6 @@ class DataProcess:
     async def process_link(self, session, link_index):
         link_url = self.search_data.urls[link_index]
         async with session.get(link_url) as response:
-            #print('{0}\n{1}'.format(link_url, response.status))
             if response.status >= 200 and response.status <= 299:
                 html = await response.text()
                 
@@ -201,7 +198,7 @@ class DataProcess:
             task = asyncio.create_task(self.process_link(session, i))
             pending_task.append(task)
 
-    async def start_processing(self):
+    async def start_link_processing(self):
         pending_task = []
 
         async with aiohttp.ClientSession() as session:
@@ -219,21 +216,18 @@ class DataProcess:
                         self.last_pushed_url_count += 1
         
         self.send_worker_end()
-
+    
     def aggregate_processing(self, aggregate_result):
         for worker in self.worker_proc:
             while True:
                 try:
                     task_comm, task_payload = worker.result_q.get()
                 except worker.result_q.Empty:
-                    #print('-EMPTY')
                     break
                 
                 if task_comm == WorkerCommand.Task:
-                    #print('-TASK RES')
                     aggregate_result.put(task_payload)
                 elif task_comm == WorkerCommand.End:
-                    #print('-END COMMAND')
                     break
         
         aggregate_result.sort_group_index()
@@ -260,17 +254,30 @@ class DataProcess:
 
         else:
             print('No result')
-            
-    def run(self):
-        asyncio.run(self.start_processing())
+    
+    def start_title_processing(self, aggregate_result):
+        strings_to_find = self.search_data.strings_to_find
+        
+        for i, title in enumerate(self.search_data.urls_title):
+            match_result = find_matching(title, strings_to_find)
+            aggregate_result.put((i, match_result))
+        
+        aggregate_result.sort_group_index()
 
+    def run(self, search_in_title = False):
         aggregate_result = AggregateResult(self.search_data.strings_to_find)
 
-        self.wait_workers()
+        if not search_in_title:
+            self.init_workers()
 
-        self.aggregate_processing(aggregate_result)
+            asyncio.run(self.start_link_processing())
+            self.wait_workers()
+
+            self.aggregate_processing(aggregate_result)
+        else:
+            self.start_title_processing(aggregate_result)
+
         self.stdout_print(aggregate_result)
-
 
 def parse_cmd_args():
     cli_parser = argparse.ArgumentParser()
@@ -283,6 +290,12 @@ def parse_cmd_args():
         help='group of bookmarks in provided file')
     cli_parser.add_argument('-ex', '--exclude', action='store', nargs='+',
         help='exclude group from search')
+    cli_parser.add_argument('-title', action='store_true',
+        help='string will be searching in bookmarks title')
+    cli_parser.add_argument('--max-worker', action='store', nargs='?', default=4,
+        help='max. workers that will be process downloaded page, default max. value 4')
+    cli_parser.add_argument('--max-queue', action='store', nargs='?', default=200,
+        help="max. length of processing links asynchronous, default max. value 200, don't used with -title flag")
 
     cli_args = cli_parser.parse_args()
     return cli_args
@@ -291,11 +304,8 @@ def main():
     cli_args = parse_cmd_args()
     search_data = SearchData(cli_args.file, cli_args.group, cli_args.exclude, cli_args.string)
 
-    for group in search_data.url_group:
-        print(group.name)
-
-    data_process = DataProcess(search_data)
-    data_process.run()
+    data_process = DataProcess(search_data, cli_args.max_worker, cli_args.max_queue)
+    data_process.run(cli_args.title)
 
 if __name__ == "__main__":
     main()

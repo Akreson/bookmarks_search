@@ -21,7 +21,7 @@ class UrlGroup:
         self.name = name
 
 class SearchData:
-    def __init__(self, files, get_group, exclude_groups, string):
+    def __init__(self, files, string, get_group, exclude_groups):
         self.urls = []
         self.urls_title = []
         self.url_group = []
@@ -56,12 +56,24 @@ class SearchData:
     def is_valid_group(self, group_name):
         name = group_name.split('.')
 
-        if len(self.get_group):
+        if (self.get_group is not None) and len(self.get_group):
             return self.group_name_match(name, self.get_group)
-        elif len(self.exclude_group):
+        elif (self.exclude_group is not None) and len(self.exclude_group):
             return not self.group_name_match(name, self.exclude_group)
 
         return True
+    
+    def check_group_presence(self, test_groups):
+        if (self.get_group is not None) and len(self.get_group):
+            check_pass = False
+            for group in test_groups:
+                if group.name in self.get_group:
+                    check_pass = True
+                    break
+            
+            return check_pass
+        else:
+            return True
 
     def get_file_group_url_info(self, file_desc, file_ext):
         if file_ext == HTML_EXT:
@@ -74,6 +86,11 @@ class SearchData:
         return file_urls_group
     
     def collate_files_urls(self, files_groups, test_groups):
+
+        if not self.check_group_presence(test_groups):
+            print("Don't have this link group(s) {}".format(self.get_group))
+            sys.exit()
+                
         for test in test_groups:
             present = False
            
@@ -86,8 +103,8 @@ class SearchData:
             if not present and self.is_valid_group(test.name):
                 files_groups.append(test)
 
-    def pack_to_search_data(self, files_groups):
-        for group in files_groups:
+    def pack_to_search_data(self, files_link_groups):
+        for group in files_link_groups:
             curr_len = len(self.urls)
             group_min = curr_len
             group_max = group_min + len(group.urls)

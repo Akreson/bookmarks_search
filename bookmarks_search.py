@@ -183,15 +183,20 @@ class DataProcess:
         for worker in self.worker_proc:
             worker.task_q.put((WorkerCommand.End, 0))
 
+    #TODO: Handling and store error
     async def process_link(self, session, link_index):
         link_url = self.search_data.urls[link_index]
-        async with session.get(link_url) as response:
-            if response.status >= 200 and response.status <= 299:
-                html = await response.text()
-                
-                worker_task = (WorkerCommand.Task, (link_index, html))
-                worker = self.scheduler.next()
-                worker.task_q.put_nowait(worker_task)
+
+        try:
+            async with session.get(link_url) as response:
+                if response.status >= 200 and response.status <= 299:
+                    html = await response.text()
+                    
+                    worker_task = (WorkerCommand.Task, (link_index, html))
+                    worker = self.scheduler.next()
+                    worker.task_q.put_nowait(worker_task)
+        except:
+            pass
     
     def push_init_pending_links(self, session, pending_task):
         for i in range(self.max_async_task):
@@ -232,26 +237,31 @@ class DataProcess:
         
         aggregate_result.sort_group_index()
     
+    #TODO: Make more efficient group index grub
     def stdout_print(self, aggregate_result):
         if aggregate_result.id_count:
             for url_group in self.search_data.url_group:
-                url_group_name = '-- {}\n'.format(url_group.name).encode('utf-8')
-                sys.stdout.buffer.write(url_group_name)
 
+                find_group_result = ''
                 for find_group in aggregate_result.find_group:
-                    find_group_name = '\t- {}\n'.format(find_group.name).encode('utf-8')
-                    sys.stdout.buffer.write(find_group_name)
 
-                    for i, id in enumerate(find_group.urls_id[find_group.last_stopped:]):
-                        if id < url_group.max:
+                    link_result = ''
+                    for i, id in enumerate(find_group.urls_id):
+                        if id >= url_group.min and id < url_group.max:
                             url = self.search_data.urls[id]
                             url_title = self.search_data.urls_title[id]
 
-                            link_info = '\t\t{0}\n\t\t{1}\n\n'.format(url_title, url).encode('utf-8')
-                            sys.stdout.buffer.write(link_info)
-                        else:
-                            find_group.last_stoped = i
+                            link_info = '\t\t{0}\n\t\t{1}\n\n'.format(url_title, url)
+                            link_result += link_info
+                    
+                    if len(link_result) != 0:
+                        find_group_name = '\t- {}\n'.format(find_group.name)
+                        find_group_result += (find_group_name + link_result)
 
+                if len(find_group_result) != 0:
+                    url_group_name = '-- {}\n'.format(url_group.name)
+                    url_group_name += find_group_result
+                    sys.stdout.buffer.write(url_group_name.encode('utf-8'))
         else:
             print('No result')
     
@@ -302,7 +312,7 @@ def parse_cmd_args():
 
 def main():
     cli_args = parse_cmd_args()
-    search_data = SearchData(cli_args.file, cli_args.group, cli_args.exclude, cli_args.string)
+    search_data = SearchData(cli_args.file, cli_args.string, cli_args.group, cli_args.exclude)
 
     data_process = DataProcess(search_data, cli_args.max_worker, cli_args.max_queue)
     data_process.run(cli_args.title)

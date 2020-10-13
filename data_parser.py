@@ -21,13 +21,12 @@ class UrlGroup:
         self.name = name
 
 class SearchData:
-    def __init__(self, files, string, get_group, exclude_groups):
+    def __init__(self, files, get_group, exclude_groups):
         self.urls = []
         self.urls_title = []
         self.url_group = []
         self.exclude_group = exclude_groups
         self.get_group = get_group
-        self.strings_to_find = string
 
         self.parse_files(files)
 

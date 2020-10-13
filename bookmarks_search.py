@@ -140,11 +140,12 @@ class Worker:
                 running = False
 
 class DataProcess:
-    def __init__(self, search_data, max_workers = 4, max_async_task = 200):
+    def __init__(self, search_data, payload_string, max_workers = 4, max_async_task = 200):
         self.worker_count = min(os.cpu_count() - 1, max_workers)
         self.worker_proc = []
         self.scheduler = Scheduler()
         self.search_data = search_data
+        self.strings_to_find = payload_string
 
         self.max_async_task = min(max_async_task, len(self.search_data.urls))
         self.last_pushed_url_count = self.max_async_task
@@ -154,7 +155,7 @@ class DataProcess:
             self.worker_proc.append(self.create_worker())
 
         for worker in self.worker_proc:
-            worker.task_q.put((WorkerCommand.JobInfo, list(self.search_data.strings_to_find)))
+            worker.task_q.put((WorkerCommand.JobInfo, list(self.strings_to_find)))
             
         self.scheduler.register_queue(self.worker_proc)
 
@@ -266,7 +267,7 @@ class DataProcess:
             print('No result')
     
     def start_title_processing(self, aggregate_result):
-        strings_to_find = self.search_data.strings_to_find
+        strings_to_find = self.strings_to_find
         
         for i, title in enumerate(self.search_data.urls_title):
             match_result = find_matching(title, strings_to_find)
@@ -274,10 +275,10 @@ class DataProcess:
         
         aggregate_result.sort_group_index()
 
-    def run(self, search_in_title = False):
-        aggregate_result = AggregateResult(self.search_data.strings_to_find)
+    def run(self, title_op, url_op, group):
+        aggregate_result = AggregateResult(self.strings_to_find)
 
-        if not search_in_title:
+        if not title_op:
             self.init_workers()
 
             asyncio.run(self.start_link_processing())
@@ -302,6 +303,10 @@ def parse_cmd_args():
         help='exclude group from search')
     cli_parser.add_argument('-title', action='store_true',
         help='string will be searching in bookmarks title')
+    cli_parser.add_argument('-url', action='store_true',
+        help='string will be searching in url')
+    cli_parser.add_argument('-gg', '--get-group', action='store',  nargs='+',
+        help='get indicated group')
     cli_parser.add_argument('--max-worker', action='store', nargs='?', default=4,
         help='max. workers that will be process downloaded page, default max. value 4')
     cli_parser.add_argument('--max-queue', action='store', nargs='?', default=200,
@@ -311,11 +316,15 @@ def parse_cmd_args():
     return cli_args
 
 def main():
-    cli_args = parse_cmd_args()
-    search_data = SearchData(cli_args.file, cli_args.string, cli_args.group, cli_args.exclude)
+    start_time = time.time()
 
-    data_process = DataProcess(search_data, cli_args.max_worker, cli_args.max_queue)
-    data_process.run(cli_args.title)
+    cli_args = parse_cmd_args()
+    search_data = SearchData(cli_args.file, cli_args.group, cli_args.exclude)
+    data_process = DataProcess(search_data, cli_args.string, cli_args.max_worker, cli_args.max_queue)
+
+    data_process.run(cli_args.title, cli_args.url, cli_args.get_group)
+    
+    print(time.time() - start_time)
 
 if __name__ == "__main__":
     main()

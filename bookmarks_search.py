@@ -97,68 +97,112 @@ class WorkerCommand:
     Task = 1
     JobInfo = 2
 
-#NOTE: Worker message:
-# (WorkerCommand.End, 0)
-# (WorkerCommand.Task, (link id, [(group_id, match_count), ...]list of tuple))
+#NOTE: Worker command
+#(JobInfo, (start link index, time to wait req. completed, max async task, string for search, urls list to process))
+#(Task, (link index, search result for each string))
+#(End, 0)
 
 class Worker:
     def __init__(self, result_q, task_q):
         self.result_q = result_q
         self.task_q = task_q
-        self.find_string = []
+        self.search_string = []
+        self.urls = []
+        self.add_index = 0
+        self.max_async_task = 0
+        self.last_pushed_url_count = 0
 
-        self.process = proc_context.Process(target=self.run)
+        self.process = proc_context.Process(target=self.start_processing)
 
     def start(self):
         self.process.start()
 
-    def dispatch_task(self, task_payload):
-        link_index = task_payload[0]
-        html = task_payload[1]
+    def init_tasks_data(self, task_payload):
+        self.add_index = task_payload[0]
+        self.time_to_wait = task_payload[1]
+        self.max_async_task = task_payload[2]
+        self.search_string = list(task_payload[3])
+        self.urls = list(task_payload[4])
 
-        result_msg = find_matching(html, self.find_string)
-        if len(result_msg):
-            self.result_q.put((WorkerCommand.Task, (link_index, list(result_msg))))
+        self.max_async_task = min(len(self.urls), self.max_async_task)
+        
+    def dispatch_task(self, link_index, html):
+        result_msg = find_matching(html, self.search_string)
 
-    def run(self):
-        running = True
+        if len(result_msg) > 0:
+            prime_link_index = link_index + self.add_index
+            self.result_q.put_nowait((WorkerCommand.Task, (prime_link_index, list(result_msg))))
 
-        while running:
+    
+    #TODO: Handling and store error
+    async def process_link(self, session, link_index):
+        link_url = self.urls[link_index]
+
+        try:
+            async with session.get(link_url) as response:
+                if response.status >= 200 and response.status <= 299:
+                    html = await response.text()
+                    self.dispatch_task(link_index, html)
+        except:
+            pass
+    
+    def push_init_pending_links(self, session, pending_task):
+        for i in range(self.max_async_task):
+            task = asyncio.create_task(self.process_link(session, i))
+            pending_task.add(task)
+        
+        self.last_pushed_url_count = self.max_async_task
+
+    async def run(self):
+        pending_task = set()
+
+        urls_count = len(self.urls)
+        #false_ssl_conn = aiohttp.TCPConnector(verify_ssl=False)
+        timeout = aiohttp.ClientTimeout(total=self.time_to_wait)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            self.push_init_pending_links(session, pending_task)
+            
+            while pending_task:
+                done, _ = await asyncio.wait(pending_task,  timeout=2, return_when=asyncio.FIRST_COMPLETED)
+
+                for future in done:
+                    pending_task.discard(future)
+
+                    if self.last_pushed_url_count < urls_count:
+                        task = asyncio.create_task(self.process_link(session, self.last_pushed_url_count))
+                        pending_task.add(task)
+                        self.last_pushed_url_count += 1
+    
+    def start_processing(self):
+        while True:
             try:
                 task = self.task_q.get()
             except self.task_q.Empty:
                 time.sleep(0.005)
                 continue
-            
+
             task_type, task_payload = task
-            if task_type == WorkerCommand.Task:
-                self.dispatch_task(task_payload)
-            elif task_type == WorkerCommand.JobInfo:
-                self.find_string = task_payload
-            elif task_type == WorkerCommand.End:
-                self.result_q.put((WorkerCommand.End, 0))
-                running = False
+
+            if task_type == WorkerCommand.JobInfo:
+                self.init_tasks_data(task_payload)
+                break
+        
+        asyncio.run(self.run())
+        self.result_q.put((WorkerCommand.End, 0))
+
 
 class DataProcess:
-    def __init__(self, search_data, payload_string, max_workers = 4, max_async_task = 200):
+    def __init__(self, search_data, payload_string, max_workers = 4, max_async_task = 200, max_wait_time = 0):
         self.worker_count = min(os.cpu_count() - 1, max_workers)
         self.worker_proc = []
         self.scheduler = Scheduler()
         self.search_data = search_data
-        self.strings_to_find = payload_string
+        self.search_string = payload_string
+        self.max_wait_time = max_wait_time
 
         self.max_async_task = min(max_async_task, len(self.search_data.urls))
         self.last_pushed_url_count = self.max_async_task
     
-    def init_workers(self):
-        for _ in range(self.worker_count):
-            self.worker_proc.append(self.create_worker())
-
-        for worker in self.worker_proc:
-            worker.task_q.put((WorkerCommand.JobInfo, list(self.strings_to_find)))
-            
-        self.scheduler.register_queue(self.worker_proc)
-
     def create_worker(self):
         result_q = proc_context.Queue()
         task_q = proc_context.Queue()
@@ -167,84 +211,60 @@ class DataProcess:
 
         return worker
 
-    def wait_workers(self):
-        wait = True
+    def init_workers(self):
+        for _ in range(self.worker_count):
+            self.worker_proc.append(self.create_worker())
 
-        while wait:
-            wait = False
+        urls_len = len(self.search_data.urls)
+        task_per_worker = int(math.floor(urls_len / self.worker_count))
+        remain_task = urls_len % self.worker_count
 
-            for worker in self.worker_proc:
-                if worker.process.is_alive():
-                    wait = True
-            
-            if wait:
-                time.sleep(0.01)
-
-    def send_worker_end(self):
+        start_index = 0
+        end_index = task_per_worker + remain_task
         for worker in self.worker_proc:
-            worker.task_q.put((WorkerCommand.End, 0))
+            urls_list = self.search_data.urls[start_index:end_index]
+            worker_task_data = \
+                (WorkerCommand.JobInfo, (start_index, self.max_wait_time, self.max_async_task, self.search_string, urls_list)) 
 
-    #TODO: Handling and store error
-    async def process_link(self, session, link_index):
-        link_url = self.search_data.urls[link_index]
+            worker.task_q.put(worker_task_data)
 
-        try:
-            async with session.get(link_url) as response:
-                if response.status >= 200 and response.status <= 299:
-                    html = await response.text()
+            start_index += task_per_worker
+            end_index += task_per_worker
+            
+        self.scheduler.register_queue(self.worker_proc)
+
+    def start_link_processing(self, aggregate):
+        self.init_workers()
+
+        urls_count = len(self.search_data.urls)
+        works_done = 0
+        while True:
+            if len(self.worker_proc) > 0:
+                for worker in self.worker_proc:
+                    try:
+                        task_comm, task_payload = worker.result_q.get()
+                    except worker.result_q.Empty:
+                        continue
                     
-                    worker_task = (WorkerCommand.Task, (link_index, html))
-                    worker = self.scheduler.next()
-                    worker.task_q.put_nowait(worker_task)
-        except:
-            pass
-    
-    def push_init_pending_links(self, session, pending_task):
-        for i in range(self.max_async_task):
-            task = asyncio.create_task(self.process_link(session, i))
-            pending_task.append(task)
-
-    async def start_link_processing(self):
-        pending_task = []
-
-        async with aiohttp.ClientSession() as session:
-            self.push_init_pending_links(session, pending_task)
-            
-            while pending_task:
-                done, _ = await asyncio.wait(pending_task, return_when=asyncio.FIRST_COMPLETED)
-
-                for future in done:
-                    pending_task.remove(future)
-
-                    if self.last_pushed_url_count < len(self.search_data.urls):
-                        task = asyncio.create_task(self.process_link(session, self.last_pushed_url_count))
-                        pending_task.append(task)
-                        self.last_pushed_url_count += 1
+                    if task_comm == WorkerCommand.Task:
+                        works_done += 1
+                        print("---Work done {0}/{1}\n".format(works_done, urls_count))
+                        print(task_payload)
+                        aggregate.put(task_payload)
+                    elif task_comm == WorkerCommand.End:
+                        self.worker_proc.remove(worker)
+            else:
+                break
         
-        self.send_worker_end()
-    
-    def aggregate_processing(self, aggregate_result):
-        for worker in self.worker_proc:
-            while True:
-                try:
-                    task_comm, task_payload = worker.result_q.get()
-                except worker.result_q.Empty:
-                    break
-                
-                if task_comm == WorkerCommand.Task:
-                    aggregate_result.put(task_payload)
-                elif task_comm == WorkerCommand.End:
-                    break
-        
-        aggregate_result.sort_group_index()
+        aggregate.sort_group_index()
     
     #TODO: Make more efficient group index grub
-    def stdout_print(self, aggregate_result):
-        if aggregate_result.id_count:
+    def stdout_print(self, aggregate):
+        if aggregate.id_count:
             for url_group in self.search_data.url_group:
 
                 find_group_result = ''
-                for find_group in aggregate_result.find_group:
+                for find_group in aggregate.find_group:
 
                     link_result = ''
                     for i, id in enumerate(find_group.urls_id):
@@ -266,29 +286,25 @@ class DataProcess:
         else:
             print('No result')
     
-    def start_title_processing(self, aggregate_result):
-        strings_to_find = self.strings_to_find
+    def start_title_processing(self, aggregate):
+        search_string = self.search_string
         
         for i, title in enumerate(self.search_data.urls_title):
-            match_result = find_matching(title, strings_to_find)
-            aggregate_result.put((i, match_result))
+            match_result = find_matching(title, search_string)
+            aggregate.put((i, match_result))
         
-        aggregate_result.sort_group_index()
+        aggregate.sort_group_index()
 
     def run(self, title_op, url_op, group):
-        aggregate_result = AggregateResult(self.strings_to_find)
+        aggregate = AggregateResult(self.search_string)
 
         if not title_op:
-            self.init_workers()
-
-            asyncio.run(self.start_link_processing())
-            self.wait_workers()
-
-            self.aggregate_processing(aggregate_result)
+            self.start_link_processing(aggregate)
         else:
-            self.start_title_processing(aggregate_result)
+            self.start_title_processing(aggregate)
 
-        self.stdout_print(aggregate_result)
+        self.stdout_print(aggregate)
+        
 
 def parse_cmd_args():
     cli_parser = argparse.ArgumentParser()
@@ -311,17 +327,19 @@ def parse_cmd_args():
         help='max. workers that will be process downloaded page, default max. value 4')
     cli_parser.add_argument('--max-queue', action='store', nargs='?', default=200,
         help="max. length of processing links asynchronous, default max. value 200, don't used with -title flag")
+    cli_parser.add_argument('--max-wait', action='store', nargs='?', default=0,
+        help="max. wait time for http request")
 
     cli_args = cli_parser.parse_args()
     return cli_args
+
 
 def main():
     start_time = time.time()
 
     cli_args = parse_cmd_args()
     search_data = SearchData(cli_args.file, cli_args.group, cli_args.exclude)
-    data_process = DataProcess(search_data, cli_args.string, cli_args.max_worker, cli_args.max_queue)
-
+    data_process = DataProcess(search_data, cli_args.string, cli_args.max_worker, cli_args.max_queue, cli_args.max_wait)
     data_process.run(cli_args.title, cli_args.url, cli_args.get_group)
     
     print(time.time() - start_time)

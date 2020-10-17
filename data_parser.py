@@ -85,7 +85,6 @@ class SearchData:
         return file_urls_group
     
     def collate_files_urls(self, files_groups, test_groups):
-
         if not self.check_group_presence(test_groups):
             print("Don't have this link group(s) {}".format(self.get_group))
             sys.exit()

@@ -8,17 +8,27 @@ import queue
 import re
 import time
 import math
-
 import aiohttp
-
 from data_parser import SearchData
+from typing import (
+    Set,
+    List,
+    Tuple,
+    Iterator
+)
 
-proc_context = multiprocessing.get_context('spawn')
+Context = multiprocessing.context.BaseContext
+Queue = multiprocessing.Queue
+MatchingResult = List[Tuple[int, int]]
+WorkerJobData = Tuple[int, int, int, List[str], List[str]]
+WorkerTaskResult = Tuple[int, MatchingResult]
 
-def get_set_bit(num, max_range):
+proc_context: Context = multiprocessing.get_context('spawn')
+
+def get_set_bit(num: int, max_range: int) -> List[int]:
     return [i for i in range(max_range) if num & (1 << i)]
 
-def find_matching(text, find_strings):
+def find_matching(text: str, find_strings: List[str]) -> MatchingResult:
     result = []
 
     for i, string in enumerate(find_strings):
@@ -38,14 +48,14 @@ class AggregateGroup:
         self.last_stopped = 0
 
 class AggregateResult:
-    def __init__(self, find_string_groups):
+    def __init__(self, find_string_groups: List[str]) -> None:
         self.id_count = 0
         self.prime_group_count = len(find_string_groups)
         self.find_group = [None]*(2**self.prime_group_count)
 
         self.init_coll_group(find_string_groups)
     
-    def init_coll_group(self, find_string_groups):
+    def init_coll_group(self, find_string_groups: List[str]) -> None:
         aggregate_group_count = len(self.find_group)
 
         for i in range(1, aggregate_group_count):
@@ -62,7 +72,7 @@ class AggregateResult:
 
             self.find_group[i] = agg_group
 
-    def put(self, task_data):
+    def put(self, task_data: WorkerTaskResult) -> None:
         link_id, task_results = task_data
 
         group_id = 0
@@ -75,22 +85,13 @@ class AggregateResult:
                 group.urls_id.append(link_id)
                 self.id_count += 1
     
-    def sort_group_index(self):
+    def sort_group_index(self) -> None:
         new_group = [group for group in self.find_group if group != None]
         self.find_group = new_group
 
         for group in self.find_group:
             group.urls_id.sort()
 
-class Scheduler:
-    def __init__(self):
-        self.queue = None
-    
-    def register_queue(self, queue):
-        self.queue = itertools.cycle(queue)
-    
-    def next(self):
-        return next(self.queue)
 
 class WorkerCommand:
     End = 0
@@ -103,7 +104,7 @@ class WorkerCommand:
 #(End, 0)
 
 class Worker:
-    def __init__(self, result_q, task_q):
+    def __init__(self, result_q: Queue, task_q: Queue) -> None:
         self.result_q = result_q
         self.task_q = task_q
         self.search_string = []
@@ -114,10 +115,10 @@ class Worker:
 
         self.process = proc_context.Process(target=self.start_processing)
 
-    def start(self):
+    def start(self) -> None:
         self.process.start()
 
-    def init_tasks_data(self, task_payload):
+    def init_tasks_data(self, task_payload: WorkerJobData) -> None:
         self.add_index = task_payload[0]
         self.time_to_wait = task_payload[1]
         self.max_async_task = task_payload[2]
@@ -126,16 +127,15 @@ class Worker:
 
         self.max_async_task = min(len(self.urls), self.max_async_task)
         
-    def dispatch_task(self, link_index, html):
+    def dispatch_task(self, link_index: int, html: str) -> None:
         result_msg = find_matching(html, self.search_string)
 
         if len(result_msg) > 0:
             prime_link_index = link_index + self.add_index
             self.result_q.put_nowait((WorkerCommand.Task, (prime_link_index, list(result_msg))))
 
-    
     #TODO: Handling and store error
-    async def process_link(self, session, link_index):
+    async def process_link(self, session: aiohttp.ClientSession, link_index: int) -> None:
         link_url = self.urls[link_index]
 
         try:
@@ -146,15 +146,17 @@ class Worker:
         except:
             pass
     
-    def push_init_pending_links(self, session, pending_task):
+    def push_init_pending_links(
+        self, session: aiohttp.ClientSession, pending_task: Set[asyncio.Task]
+    ) -> None:
         for i in range(self.max_async_task):
             task = asyncio.create_task(self.process_link(session, i))
             pending_task.add(task)
         
         self.last_pushed_url_count = self.max_async_task
 
-    async def run(self):
-        pending_task = set()
+    async def run(self) -> None:
+        pending_task: Set[asyncio.Task] = set()
 
         urls_count = len(self.urls)
         #false_ssl_conn = aiohttp.TCPConnector(verify_ssl=False)
@@ -173,7 +175,7 @@ class Worker:
                         pending_task.add(task)
                         self.last_pushed_url_count += 1
     
-    def start_processing(self):
+    def start_processing(self) -> None:
         while True:
             try:
                 task = self.task_q.get()
@@ -192,10 +194,15 @@ class Worker:
 
 
 class DataProcess:
-    def __init__(self, search_data, payload_string, max_workers = 4, max_async_task = 200, max_wait_time = 0):
+    def __init__(
+        self, search_data: SearchData,
+        payload_string: List[str],
+        max_workers: int = 4,
+        max_async_task: int = 200,
+        max_wait_time: int = 0
+    ) -> None:
         self.worker_count = min(os.cpu_count() - 1, max_workers)
         self.worker_proc = []
-        self.scheduler = Scheduler()
         self.search_data = search_data
         self.search_string = payload_string
         self.max_wait_time = max_wait_time
@@ -203,7 +210,7 @@ class DataProcess:
         self.max_async_task = min(max_async_task, len(self.search_data.urls))
         self.last_pushed_url_count = self.max_async_task
     
-    def create_worker(self):
+    def create_worker(self) -> Worker:
         result_q = proc_context.Queue()
         task_q = proc_context.Queue()
         worker = Worker(result_q, task_q)
@@ -211,7 +218,7 @@ class DataProcess:
 
         return worker
 
-    def init_workers(self):
+    def init_workers(self) -> None:
         for _ in range(self.worker_count):
             self.worker_proc.append(self.create_worker())
 
@@ -230,14 +237,11 @@ class DataProcess:
 
             start_index += task_per_worker
             end_index += task_per_worker
-            
-        self.scheduler.register_queue(self.worker_proc)
 
-    def start_link_processing(self, aggregate):
+
+    def start_link_processing(self, aggregate: AggregateResult) -> None:
         self.init_workers()
 
-        urls_count = len(self.search_data.urls)
-        works_done = 0
         while True:
             if len(self.worker_proc) > 0:
                 for worker in self.worker_proc:
@@ -247,9 +251,6 @@ class DataProcess:
                         continue
                     
                     if task_comm == WorkerCommand.Task:
-                        works_done += 1
-                        print("---Work done {0}/{1}\n".format(works_done, urls_count))
-                        print(task_payload)
                         aggregate.put(task_payload)
                     elif task_comm == WorkerCommand.End:
                         self.worker_proc.remove(worker)
@@ -259,7 +260,7 @@ class DataProcess:
         aggregate.sort_group_index()
     
     #TODO: Make more efficient group index grub
-    def stdout_print(self, aggregate):
+    def stdout_print(self, aggregate: AggregateResult) -> None:
         if aggregate.id_count:
             for url_group in self.search_data.url_group:
 
@@ -286,7 +287,7 @@ class DataProcess:
         else:
             print('No result')
     
-    def start_title_processing(self, aggregate):
+    def start_title_processing(self, aggregate: AggregateResult) -> None:
         search_string = self.search_string
         
         for i, title in enumerate(self.search_data.urls_title):
@@ -295,7 +296,7 @@ class DataProcess:
         
         aggregate.sort_group_index()
 
-    def run(self, title_op, url_op, group):
+    def run(self, title_op: bool, url_op: bool, group_op: List[str]) -> None:
         aggregate = AggregateResult(self.search_string)
 
         if not title_op:
@@ -306,7 +307,7 @@ class DataProcess:
         self.stdout_print(aggregate)
         
 
-def parse_cmd_args():
+def parse_cmd_args() -> argparse.Namespace:
     cli_parser = argparse.ArgumentParser()
     cli_parser.add_argument('-f', '--file', action='store', nargs='+', required=True,
         help='''set file for parse (must be saved file from browser bookmarks .html file

@@ -1,12 +1,19 @@
 import os
 import sys
 import json
+from io import TextIOWrapper
+from typing import (
+    Set,
+    List,
+    Tuple,
+    Optional
+)
 
 JSON_EXT = '.json'
 HTML_EXT = '.html'
 
 class FileUrlGroup:
-    def __init__(self, name):
+    def __init__(self, name: str) -> None:
         self.name = name
         self.urls = []
         self.urls_title = []
@@ -15,13 +22,15 @@ from browser_bm_parser import browser_bm_parse_html
 from speed_dial_parser import sd_parse_json
 
 class UrlGroup:
-    def __init__(self, name, min = 0, max = 0):
+    def __init__(self, name: str, min: int = 0, max: int = 0) -> None:
         self.min = min
         self.max = max
         self.name = name
 
 class SearchData:
-    def __init__(self, files, get_group, exclude_groups):
+    def __init__(
+        self, files: List[str], get_group: List[str], exclude_groups: List[str]
+    ) -> None:
         self.urls = []
         self.urls_title = []
         self.url_group = []
@@ -30,7 +39,7 @@ class SearchData:
 
         self.parse_files(files)
 
-    def group_name_match(self, name, group_list):
+    def group_name_match(self, name: str, group_list: List[str]) -> bool:
         name_len = len(name)
         
         for group_name in group_list:
@@ -52,7 +61,7 @@ class SearchData:
                 
                 return valid
 
-    def is_valid_group(self, group_name):
+    def is_valid_group(self, group_name: str) -> bool:
         name = group_name.split('.')
 
         if (self.get_group is not None) and len(self.get_group):
@@ -62,7 +71,7 @@ class SearchData:
 
         return True
     
-    def check_group_presence(self, test_groups):
+    def check_group_presence(self, test_groups: List[FileUrlGroup]) -> bool:
         if (self.get_group is not None) and len(self.get_group):
             check_pass = False
             for group in test_groups:
@@ -74,7 +83,9 @@ class SearchData:
         else:
             return True
 
-    def get_file_group_url_info(self, file_desc, file_ext):
+    def get_file_group_url_info(
+        self, file_desc: TextIOWrapper, file_ext: str
+    ) -> List[FileUrlGroup]:
         if file_ext == HTML_EXT:
             file_data = file_desc.read()
             file_urls_group = browser_bm_parse_html(file_data)
@@ -84,7 +95,9 @@ class SearchData:
 
         return file_urls_group
     
-    def collate_files_urls(self, files_groups, test_groups):
+    def collate_files_urls(
+        self, files_groups: List[FileUrlGroup], test_groups: List[FileUrlGroup]
+    ):
         if not self.check_group_presence(test_groups):
             print("Don't have this link group(s) {}".format(self.get_group))
             sys.exit()
@@ -101,7 +114,7 @@ class SearchData:
             if not present and self.is_valid_group(test.name):
                 files_groups.append(test)
 
-    def pack_to_search_data(self, files_link_groups):
+    def pack_to_search_data(self, files_link_groups: List[FileUrlGroup]) -> None:
         for group in files_link_groups:
             curr_len = len(self.urls)
             group_min = curr_len
@@ -111,8 +124,8 @@ class SearchData:
             self.urls += group.urls
             self.urls_title += group.urls_title
 
-    def parse_files_urls(self, files_to_parse):
-        files_groups = []
+    def parse_files_urls(self, files_to_parse: List[str]) -> None:
+        files_groups: List[FileUrlGroup] = []
 
         for file in files_to_parse:
             with open(file, encoding='utf-8') as f:
@@ -122,8 +135,8 @@ class SearchData:
 
         self.pack_to_search_data(files_groups)
 
-    def parse_files(self, files):
-        files_to_parse = []
+    def parse_files(self, files: List[str]) -> None:
+        files_to_parse: List[str] = []
 
         for file in files:
             if os.path.exists(file):

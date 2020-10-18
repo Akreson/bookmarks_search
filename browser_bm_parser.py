@@ -1,6 +1,8 @@
 from html.parser import HTMLParser
 from data_parser import FileUrlGroup
 
+from typing import List
+
 class Tag:
     DT = 'dt'
     DL = 'dl'
@@ -118,7 +120,7 @@ class BookmarksParser(HTMLParser):
     def handle_data(self, data):
        self.curr_tag_data = data
 
-def browser_bm_parse_html(html_data):
+def browser_bm_parse_html(html_data) -> List[FileUrlGroup]:
     bm_parser = BookmarksParser()
     bm_parser.feed(html_data)
 

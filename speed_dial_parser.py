@@ -1,9 +1,20 @@
 from data_parser import FileUrlGroup
+from typing import (
+    Set,
+    List,
+    Dict,
+    Tuple,
+    Optional,
+
+    TypeVar
+)
+
+JSONVar = TypeVar("JsonVar", str, int, float)
 
 #TODO: Handle error!!
 #TODO: throw error
 
-def get_max_group_id(groups_dict):
+def get_max_group_id(groups_dict: Dict[JSONVar, JSONVar]) -> int:
     max_group_id = 0
 
     if len(groups_dict) > 0:
@@ -14,7 +25,7 @@ def get_max_group_id(groups_dict):
     
     return max_group_id
 
-def get_sd_url_groups(json_data):
+def get_sd_url_groups(json_data: str) -> List[FileUrlGroup]:
     groups_dict = json_data['groups']
     max_group_id = get_max_group_id(groups_dict)
 
@@ -25,7 +36,9 @@ def get_sd_url_groups(json_data):
 
     return group_list
 
-def fill_groups_urls(url_groups, json_data):
+def fill_groups_urls(
+    url_groups: List[FileUrlGroup], json_data: Dict[JSONVar, JSONVar]
+) -> None:
     urls_dict = json_data['dials']
 
     for (_, value) in urls_dict.items():
@@ -35,8 +48,7 @@ def fill_groups_urls(url_groups, json_data):
             group.urls.append(value['url'])
             group.urls_title.append(value['title'])
 
-
-def sd_parse_json(json_data):
+def sd_parse_json(json_data: Dict[JSONVar, JSONVar]) -> List[FileUrlGroup]:
     sd_groups = get_sd_url_groups(json_data)
     fill_groups_urls(sd_groups, json_data)
     

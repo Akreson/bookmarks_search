@@ -1,5 +1,5 @@
 import multiprocessing
-from typing import Set, List, Tuple, Iterator, TypeVar
+from typing import Set, List, Tuple, TypeVar
 
 Context = multiprocessing.context.BaseContext
 Queue = multiprocessing.Queue

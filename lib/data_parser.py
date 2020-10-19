@@ -2,12 +2,7 @@ import os
 import sys
 import json
 from io import TextIOWrapper
-from typing import (
-    Set,
-    List,
-    Tuple,
-    Optional
-)
+from typing import Set, List, Tuple, Optional
 
 JSON_EXT = '.json'
 HTML_EXT = '.html'
@@ -18,8 +13,8 @@ class FileUrlGroup:
         self.urls = []
         self.urls_title = []
 
-from browser_bm_parser import browser_bm_parse_html
-from speed_dial_parser import sd_parse_json
+from .browser_bm_parser import browser_bm_parse_html
+from .speed_dial_parser import sd_parse_json
 
 class UrlGroup:
     def __init__(self, name: str, min: int = 0, max: int = 0) -> None:

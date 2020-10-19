@@ -1,5 +1,5 @@
 from html.parser import HTMLParser
-from data_parser import FileUrlGroup
+from .data_parser import FileUrlGroup
 
 from typing import List
 

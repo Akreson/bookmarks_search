@@ -1,15 +1,6 @@
-from data_parser import FileUrlGroup
-from typing import (
-    Set,
-    List,
-    Dict,
-    Tuple,
-    Optional,
-
-    TypeVar
-)
-
-JSONVar = TypeVar("JsonVar", str, int, float)
+from .data_parser import FileUrlGroup
+from typing import List, Dict
+from .custom_types import JSONVar
 
 #TODO: Handle error!!
 #TODO: throw error

@@ -97,10 +97,19 @@ class Worker:
 
     async def run(self) -> None:
         pending_task: Set[asyncio.Task] = set()
-
         urls_count = len(self.urls)
-        conn_timeout = aiohttp.ClientTimeout(connect=self.time_to_wait, sock_connect=self.time_to_wait)
-        async with aiohttp.ClientSession(timeout=conn_timeout) as session:
+
+        if self.max_async_task > 100:
+            conn = aiohttp.TCPConnector(limit=self.max_async_task)
+        else:
+            conn = aiohttp.TCPConnector()
+        
+        if self.time_to_wait != 0:
+            conn_timeout = aiohttp.ClientTimeout(connect=self.time_to_wait, sock_connect=self.time_to_wait)
+        else:
+            conn_timeout = aiohttp.ClientTimeout()
+
+        async with aiohttp.ClientSession(connector=conn, timeout=conn_timeout) as session:
             self.push_init_pending_links(session, pending_task)
             
             while pending_task:

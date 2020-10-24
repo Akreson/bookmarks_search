@@ -6,7 +6,7 @@ import sys
 import re
 import time
 import math
-from typing import Set, List, Tuple, Iterator
+from typing import Set, List, Tuple
 
 from .aggregate import AggregateResult
 from .data_parser import SearchData, UrlGroup

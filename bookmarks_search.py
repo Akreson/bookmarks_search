@@ -2,6 +2,12 @@ import time
 import argparse
 from lib.data_parser import SearchData
 from lib.processing import DataProcess
+
+def uint_check(value):
+    int_value = int(value)
+    if int_value < 0:
+        raise argparse.ArgumentTypeError("%s is an invalid positive int value" % value)
+    return int_value
         
 def parse_cmd_args() -> argparse.Namespace:
     cli_parser = argparse.ArgumentParser()
@@ -20,11 +26,11 @@ def parse_cmd_args() -> argparse.Namespace:
         help='string will be searching in url')
     cli_parser.add_argument('-gg', '--get-group', action='store',  nargs='+',
         help='get indicated group')
-    cli_parser.add_argument('--max-worker', action='store', nargs='?', default=4,
+    cli_parser.add_argument('--max-worker', action='store', nargs='?', type=uint_check, default=4,
         help='max. workers that will be process downloaded page, default max. value 4')
-    cli_parser.add_argument('--max-queue', action='store', nargs='?', default=200,
+    cli_parser.add_argument('--max-queue', action='store', nargs='?', type=uint_check, default=200,
         help="max. length of processing links asynchronous, default max. value 200, don't used with -title flag")
-    cli_parser.add_argument('--max-wait', action='store', nargs='?', default=0,
+    cli_parser.add_argument('--max-wait', action='store', nargs='?', type=uint_check, default=0,
         help="max. wait time for http request")
 
     cli_args = cli_parser.parse_args()

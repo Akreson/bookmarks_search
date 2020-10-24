@@ -141,7 +141,7 @@ class DataProcess:
         max_async_task: int = 200,
         max_wait_time: int = 0
     ) -> None:
-        self.worker_count = min(os.cpu_count() - 1, max_workers)
+        self.worker_count = max(1, min(os.cpu_count() - 1, max_workers))
         self.worker_proc = []
         self.search_data = search_data
         self.search_string = payload_string

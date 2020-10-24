@@ -1,4 +1,5 @@
 import time
+import sys
 import argparse
 from lib.data_parser import SearchData
 from lib.processing import DataProcess
@@ -14,7 +15,7 @@ def parse_cmd_args() -> argparse.Namespace:
     cli_parser.add_argument('-f', '--file', action='store', nargs='+', required=True,
         help='''set file for parse (must be saved file from browser bookmarks .html file
             or from browser ext. SpeedDeal .json)''')
-    cli_parser.add_argument('-s', '--string', action='store', nargs='+', required=True,
+    cli_parser.add_argument('-s', '--string', action='store', nargs='+',
         help='string for search in url links')
     cli_parser.add_argument('-g', '--group', action='store', nargs='+',
         help='group of bookmarks in provided file')
@@ -24,7 +25,7 @@ def parse_cmd_args() -> argparse.Namespace:
         help='string will be searching in bookmarks title')
     cli_parser.add_argument('-url', action='store_true',
         help='string will be searching in url')
-    cli_parser.add_argument('-gg', '--get-group', action='store',  nargs='+',
+    cli_parser.add_argument('-gg', '--get-group', action='store',  nargs='*', default=[],
         help='get indicated group')
     cli_parser.add_argument('--max-worker', action='store', nargs='?', type=uint_check, default=4,
         help='max. workers that will be process downloaded page, default max. value 4')

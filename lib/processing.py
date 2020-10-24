@@ -6,7 +6,7 @@ import sys
 import re
 import time
 import math
-from typing import Set, List, Tuple
+from typing import Set, List, Tuple, Optional
 
 from .aggregate import AggregateResult
 from .data_parser import SearchData, UrlGroup
@@ -144,7 +144,7 @@ class Worker:
 class DataProcess:
     def __init__(
         self, search_data: SearchData,
-        payload_string: List[str],
+        payload_string: Optional[List[str]] = None,
         max_workers: int = 4,
         max_async_task: int = 200,
         max_wait_time: int = 0
@@ -187,7 +187,7 @@ class DataProcess:
             end_index += task_per_worker
 
 
-    def start_link_processing(self, aggregate: AggregateResult) -> None:
+    def link_processing(self, aggregate: AggregateResult) -> None:
         self.init_workers()
 
         while True:
@@ -207,6 +207,24 @@ class DataProcess:
         
         aggregate.sort_group_index()
     
+    def title_processing(self, aggregate: AggregateResult) -> None:
+        search_string = self.search_string
+        
+        for i, title in enumerate(self.search_data.urls_title):
+            match_result = find_matching(title, search_string)
+            aggregate.put((i, match_result))
+        
+        aggregate.sort_group_index()
+    
+    def url_processing(self, aggregate: AggregateResult) -> None:
+        search_string = self.search_string
+
+        for i, url in enumerate(self.search_data.urls):
+            match_result = find_matching(url, search_string)
+            aggregate.put((i, match_result))
+        
+        aggregate.sort_group_index()
+
     #TODO: Make more efficient group index grub
     def stdout_print(self, aggregate: AggregateResult) -> None:
         if aggregate.id_count:
@@ -234,22 +252,50 @@ class DataProcess:
                     sys.stdout.buffer.write(url_group_name.encode('utf-8'))
         else:
             print('No result')
-    
-    def start_title_processing(self, aggregate: AggregateResult) -> None:
-        search_string = self.search_string
-        
-        for i, title in enumerate(self.search_data.urls_title):
-            match_result = find_matching(title, search_string)
-            aggregate.put((i, match_result))
-        
-        aggregate.sort_group_index()
 
-    def run(self, title_op: bool, url_op: bool, group_op: List[str]) -> None:
-        aggregate = AggregateResult(self.search_string)
+    def set_group_str_info(self, get_group: UrlGroup) -> str:
+        result = ''
+        result += '-- {}\n'.format(get_group.name)
 
-        if not title_op:
-            self.start_link_processing(aggregate)
+        start_id = get_group.min
+        for i in range(get_group.count):
+            id = start_id + i
+            url = self.search_data.urls[id]
+            url_title = self.search_data.urls_title[id]
+
+            link_info = '\t\t{0}\n\t\t{1}\n\n'.format(url_title, url)
+            result += link_info
+        
+        result += '\n\n'
+        return result
+
+    def get_group_data(self, group_list: List[str]) -> None:
+        if len(group_list) != 0:
+            for get_group_name in group_list:
+                for url_group in self.search_data.url_group:
+                    if get_group_name == url_group.name:
+                        group_result = self.set_group_str_info(url_group)
+                        sys.stdout.buffer.write(group_result.encode('utf-8'))
         else:
-            self.start_title_processing(aggregate)
+            for url_group in self.search_data.url_group:
+                group_result = self.set_group_str_info(url_group)
+                sys.stdout.buffer.write(group_result.encode('utf-8'))
+        
 
-        self.stdout_print(aggregate)
+    def run(self, title_op: bool, url_op: bool, group_op: Optional[List[str]] = None) -> None:
+        if group_op is None:
+            if self.search_string is not None:
+                aggregate = AggregateResult(self.search_string)
+               
+                if title_op:
+                    self.title_processing(aggregate)
+                elif url_op:
+                    self.url_processing(aggregate)
+                else:
+                    self.link_processing(aggregate)
+
+                self.stdout_print(aggregate)
+            else:
+                print('Error: put some string for search')
+        else:
+            self.get_group_data(group_op)

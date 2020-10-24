@@ -21,6 +21,7 @@ class UrlGroup:
         self.min = min
         self.max = max
         self.name = name
+        self.count = max - min
 
 class SearchData:
     def __init__(

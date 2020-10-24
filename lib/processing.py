@@ -99,9 +99,8 @@ class Worker:
         pending_task: Set[asyncio.Task] = set()
 
         urls_count = len(self.urls)
-        #false_ssl_conn = aiohttp.TCPConnector(verify_ssl=False)
-        timeout = aiohttp.ClientTimeout(total=self.time_to_wait)
-        async with aiohttp.ClientSession(timeout=timeout) as session:
+        conn_timeout = aiohttp.ClientTimeout(connect=self.time_to_wait, sock_connect=self.time_to_wait)
+        async with aiohttp.ClientSession(timeout=conn_timeout) as session:
             self.push_init_pending_links(session, pending_task)
             
             while pending_task:

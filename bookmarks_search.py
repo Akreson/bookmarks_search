@@ -25,7 +25,7 @@ def parse_cmd_args() -> argparse.Namespace:
         help='string will be searching in bookmarks title')
     cli_parser.add_argument('-url', action='store_true',
         help='string will be searching in url')
-    cli_parser.add_argument('-gg', '--get-group', action='store',  nargs='*', default=[],
+    cli_parser.add_argument('-gg', '--get-group', action='store',  nargs='*', default=None,
         help='get indicated group')
     cli_parser.add_argument('--max-worker', action='store', nargs='?', type=uint_check, default=4,
         help='max. workers that will be process downloaded page, default max. value 4')

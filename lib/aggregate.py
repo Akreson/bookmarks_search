@@ -31,7 +31,7 @@ class AggregateResult:
                     group_separator = ', '
 
                 group = find_string_groups[id]
-                agg_group.name += (group + group_separator)
+                agg_group.name += (group_separator + group)
 
             self.find_group[i] = agg_group
 

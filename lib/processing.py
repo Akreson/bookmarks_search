@@ -53,6 +53,8 @@ class Worker:
         self.max_async_task = 0
         self.last_pushed_url_count = 0
 
+        self.global_done = 0
+
         self.process = proc_context.Process(target=self.start_processing)
 
     def start(self) -> None:
@@ -83,6 +85,7 @@ class Worker:
                 if response.status >= 200 and response.status <= 299:
                     html = await response.text()
                     self.dispatch_task(link_index, html)
+                    self.global_done += 1
         except:
             pass
     
@@ -105,7 +108,7 @@ class Worker:
             conn = aiohttp.TCPConnector()
         
         if self.time_to_wait != 0:
-            conn_timeout = aiohttp.ClientTimeout(connect=self.time_to_wait, sock_connect=self.time_to_wait)
+            conn_timeout = aiohttp.ClientTimeout(total=None, sock_connect=self.time_to_wait, sock_read=self.time_to_wait)
         else:
             conn_timeout = aiohttp.ClientTimeout()
 
@@ -114,6 +117,7 @@ class Worker:
             
             while pending_task:
                 done, _ = await asyncio.wait(pending_task,  timeout=2, return_when=asyncio.FIRST_COMPLETED)
+                print('IN SET {}\n'.format(len(pending_task)))
 
                 for future in done:
                     pending_task.discard(future)

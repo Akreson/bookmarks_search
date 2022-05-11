@@ -9,7 +9,7 @@ def get_max_group_id(groups_dict: Dict[JSONVar, JSONVar]) -> int:
     max_group_id = 0
 
     if len(groups_dict) > 0:
-        for (_, value) in groups_dict.items():
+        for value in groups_dict:
             id = value['id']
             if max_group_id < id:
                 max_group_id = id
@@ -21,7 +21,7 @@ def get_sd_url_groups(json_data: str) -> List[FileUrlGroup]:
     max_group_id = get_max_group_id(groups_dict)
 
     group_list = [None]*(max_group_id + 1)
-    for _, value in groups_dict.items():
+    for value in groups_dict:
         id = value['id']
         group_list[id] = FileUrlGroup(value['title'])
 
@@ -32,7 +32,7 @@ def fill_groups_urls(
 ) -> None:
     urls_dict = json_data['dials']
 
-    for (_, value) in urls_dict.items():
+    for value in urls_dict:
         group_id = value['idgroup']
         group = url_groups[group_id]
         if group:
